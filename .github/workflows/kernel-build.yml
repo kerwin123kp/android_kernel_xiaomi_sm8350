@@ -32,46 +32,29 @@ jobs:
           export PATH=/usr/bin:$PATH
           clang --version
 
-      - name: 🔄 Clone NetHunter Kernel Patcher (Check if Exists)
+      - name: 🔄 Clone NetHunter Kernel Builder
         run: |
           git clone --depth=1 https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel.git nethunter
-          if [ ! -f "nethunter/patch-kernel.sh" ]; then
-            echo "❌ Error: patch-kernel.sh not found!"
+          if [ ! -f "nethunter/build.sh" ]; then
+            echo "❌ Error: build.sh not found!"
             exit 1
           fi
 
-      - name: 🔧 Apply Kali NetHunter Patches (Manually if Missing)
+      - name: 🔧 Run NetHunter Build Script
         run: |
           cd nethunter
-          chmod +x patch-kernel.sh
-          ./patch-kernel.sh ../ || echo "⚠️ Patch script failed! Applying patches manually..."
-          cd ..
-          git apply nethunter/patches/*.patch || echo "⚠️ Manual patching skipped!"
-
-      - name: 🔧 Configure Kernel
-        run: |
-          cd android_kernel_xiaomi_sm8350
-          make O=out ARCH=arm64 lineage_defconfig
-          cat out/.config | grep CONFIG_  # Show applied config
-
-      - name: 🚀 Compile Kernel
-        run: |
-          cd android_kernel_xiaomi_sm8350
-          export ARCH=arm64
-          export SUBARCH=arm64
-          export KBUILD_BUILD_USER="kerwin123kp"
-          export KBUILD_BUILD_HOST="GitHubActions"
-          make -j$(nproc) O=out CC=clang CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu-
+          chmod +x build.sh
+          ./build.sh -t ../android_kernel_xiaomi_sm8350 -c lineage_defconfig -b
 
       - name: 📦 Create AnyKernel3 Flashable ZIP
         run: |
           git clone https://github.com/osm0sis/AnyKernel3.git AnyKernel
-          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel/
+          cp android_kernel_xiaomi_sm8350/out/arch/arm64/boot/Image.gz-dtb AnyKernel/
           cd AnyKernel
           zip -r9 AnyKernel3.zip ./
 
-      - name: 📤 Upload Kernel ZIP (Fixed)
-        uses: actions/upload-artifact@v4  # Updated to v4
+      - name: 📤 Upload Kernel ZIP
+        uses: actions/upload-artifact@v4
         with:
           name: Xiaomi-11T-Kernel
           path: AnyKernel/AnyKernel3.zip
