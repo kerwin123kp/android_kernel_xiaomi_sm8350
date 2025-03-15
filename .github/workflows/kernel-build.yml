@@ -1,0 +1,61 @@
+name: Auto Kernel Patcher
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Setup Environment
+      run: |
+        sudo apt update && sudo apt install -y bc bison flex build-essential git wget curl \
+          libssl-dev ccache python3 unzip zip
+        mkdir -p $HOME/toolchains
+
+    - name: Checkout Kernel Source
+      uses: actions/checkout@v4
+      with:
+        repository: kerwin123kp/android_kernel_xiaomi_sm8350
+        ref: main
+        path: kernel
+
+    - name: Download & Install Clang 19
+      run: |
+        cd $HOME/toolchains
+        wget https://github.com/llvm/llvm-project/releases/download/llvmorg-19.0.0/clang+llvm-19.0.0-x86_64-linux-gnu.tar.xz
+        tar -xf clang+llvm-19.0.0-x86_64-linux-gnu.tar.xz
+        mv clang+llvm-19.0.0-x86_64-linux-gnu clang-19
+        echo "PATH=$HOME/toolchains/clang-19/bin:$PATH" >> $GITHUB_ENV
+
+    - name: Apply NetHunter Patches
+      run: |
+        cd kernel
+        git clone --depth=1 https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel-patcher.git nethunter-patcher
+        cd nethunter-patcher
+        ./patch-kernel.sh --kernel ../
+
+    - name: Build Kernel
+      run: |
+        cd kernel
+        export ARCH=arm64
+        export SUBARCH=arm64
+        export CROSS_COMPILE=aarch64-linux-gnu-
+        make vili_defconfig
+        make -j$(nproc) CC=clang
+
+    - name: Package Kernel (AnyKernel3)
+      run: |
+        mkdir -p anykernel
+        cd anykernel
+        git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git
+        cp ../kernel/arch/arm64/boot/Image.gz-dtb AnyKernel3/
+        cd AnyKernel3
+        zip -r Xiaomi11TPro-KaliNetHunter.zip *
+
+    - name: Upload Flashable ZIP
+      uses: actions/upload-artifact@v4
+      with:
+        name: KaliNetHunter-Kernel
+        path: anykernel/AnyKernel3/Xiaomi11TPro-KaliNetHunter.zip
