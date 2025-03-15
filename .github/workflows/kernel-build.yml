@@ -60,8 +60,8 @@ jobs:
           cd AnyKernel
           zip -r9 AnyKernel3.zip ./
 
-      - name: 📤 Upload Kernel ZIP
-        uses: actions/upload-artifact@v3
+      - name: 📤 Upload Kernel ZIP (Fixed)
+        uses: actions/upload-artifact@v4  # Updated to v4
         with:
           name: Xiaomi-11T-Kernel
           path: AnyKernel/AnyKernel3.zip
