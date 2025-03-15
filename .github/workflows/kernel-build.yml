@@ -1,6 +1,12 @@
 name: Auto Kernel Patcher
 
 on:
+  push:
+    branches:
+      - lineage-22.1
+  pull_request:
+    branches:
+      - lineage-22.1
   workflow_dispatch:
 
 jobs:
@@ -10,52 +16,41 @@ jobs:
     steps:
       - name: Checkout Kernel Source
         uses: actions/checkout@v4
-        with:
-          repository: kerwin123kp/android_kernel_xiaomi_sm8350
-          ref: lineage-22.1
-          fetch-depth: 1
 
       - name: Install Dependencies
         run: |
           sudo apt update
-          sudo apt install -y wget curl git clang lld llvm build-essential bc flex bison \
-            libssl-dev ccache make automake autoconf libtool python3-pip \
-            libncurses-dev git-lfs libelf-dev
-
+          sudo apt install -y git wget curl clang lld llvm bc bison flex build-essential libssl-dev \
+          ccache make python3 rsync unzip xz-utils libarchive-tools
+      
       - name: Clone NetHunter Kernel Builder
-        run: git clone --depth=1 https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel.git nethunter
+        run: |
+          git clone --depth=1 https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel.git nethunter
 
       - name: Apply NetHunter Patches
         run: |
           cd nethunter
           chmod +x build.sh
-          ./build.sh -p  # Automatically patch the kernel
+          export TERM=xterm  # Prevents TERM errors
+          ./build.sh -p --no-interaction --defconfig vili_defconfig || echo "[ERROR] Patch script failed"
 
-      - name: Setup Toolchain (Clang 19)
+      - name: Configure Kernel
         run: |
-          mkdir -p toolchains
-          wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-19.0.4/clang+llvm-19.0.4-x86_64-linux-gnu.tar.xz
-          tar -xf clang+llvm-19.0.4-x86_64-linux-gnu.tar.xz -C toolchains
-          export PATH=$PWD/toolchains/clang+llvm-19.0.4-x86_64-linux-gnu/bin:$PATH
+          cd nethunter
+          ./build.sh -c --defconfig vili_defconfig
 
       - name: Compile Kernel
         run: |
-          export ARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-gnu-
-          export CLANG_TRIPLE=aarch64-linux-gnu-
-          export PATH=$PWD/toolchains/clang+llvm-19.0.4-x86_64-linux-gnu/bin:$PATH
-          make O=out vili_defconfig
-          make O=out -j$(nproc) CC=clang CROSS_COMPILE=aarch64-linux-gnu-
+          cd nethunter
+          ./build.sh -b --no-interaction
 
       - name: Package Kernel (AnyKernel3)
         run: |
-          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git anykernel
-          cp out/arch/arm64/boot/Image.gz-dtb anykernel/
-          cd anykernel
-          zip -r9 Kernel-Nethunter.zip *
-
-      - name: Upload Kernel ZIP
-        uses: actions/upload-artifact@v4  # Updated to v4
+          cd nethunter
+          ./build.sh -z
+      
+      - name: Upload Kernel Zip
+        uses: actions/upload-artifact@v3
         with:
-          name: Kernel-Nethunter
-          path: anykernel/Kernel-Nethunter.zip
+          name: NetHunter-Kernel
+          path: nethunter/out/*.zip
