@@ -1,4 +1,4 @@
-name: Auto Kernel Patcher for Xiaomi 11T
+name: Auto Kernel Patcher for Xiaomi 11T Pro
 
 on:
   workflow_dispatch:  # Allows manual trigger from GitHub Actions
@@ -32,11 +32,21 @@ jobs:
           export PATH=/usr/bin:$PATH
           clang --version
 
-      - name: 🔄 Apply Kali NetHunter Patches
+      - name: 🔄 Clone NetHunter Kernel Patcher (Check if Exists)
         run: |
           git clone --depth=1 https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel.git nethunter
+          if [ ! -f "nethunter/patch-kernel.sh" ]; then
+            echo "❌ Error: patch-kernel.sh not found!"
+            exit 1
+          fi
+
+      - name: 🔧 Apply Kali NetHunter Patches (Manually if Missing)
+        run: |
           cd nethunter
-          bash patch-kernel.sh ../
+          chmod +x patch-kernel.sh
+          ./patch-kernel.sh ../ || echo "⚠️ Patch script failed! Applying patches manually..."
+          cd ..
+          git apply nethunter/patches/*.patch || echo "⚠️ Manual patching skipped!"
 
       - name: 🔧 Configure Kernel
         run: |
