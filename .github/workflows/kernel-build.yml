@@ -1,60 +1,61 @@
-name: Auto Kernel Patcher for Xiaomi 11T Pro
+name: Auto Kernel Patcher
 
 on:
-  workflow_dispatch:  # Allows manual trigger from GitHub Actions
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout Kernel Source
+      - name: Checkout Kernel Source
         uses: actions/checkout@v4
         with:
           repository: kerwin123kp/android_kernel_xiaomi_sm8350
-          ref: lineage-22.1  # Set to your kernel branch
+          ref: lineage-22.1
+          fetch-depth: 1
 
-      - name: 🛠 Install Dependencies
+      - name: Install Dependencies
         run: |
           sudo apt update
-          sudo apt install -y git wget curl bc bison flex \
-                              build-essential zip unzip \
-                              python3 python3-pip \
-                              ccache libssl-dev \
-                              libelf-dev libncurses-dev \
-                              device-tree-compiler
+          sudo apt install -y wget curl git clang lld llvm build-essential bc flex bison \
+            libssl-dev ccache make automake autoconf libtool python3-pip \
+            libncurses-dev git-lfs libelf-dev
 
-      - name: ⚡ Install Clang 19 (Fixed)
-        run: |
-          wget https://apt.llvm.org/llvm.sh
-          chmod +x llvm.sh
-          sudo ./llvm.sh 19
-          export PATH=/usr/bin:$PATH
-          clang --version
+      - name: Clone NetHunter Kernel Builder
+        run: git clone --depth=1 https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel.git nethunter
 
-      - name: 🔄 Clone NetHunter Kernel Builder
-        run: |
-          git clone --depth=1 https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel.git nethunter
-          if [ ! -f "nethunter/build.sh" ]; then
-            echo "❌ Error: build.sh not found!"
-            exit 1
-          fi
-
-      - name: 🔧 Run NetHunter Build Script
+      - name: Apply NetHunter Patches
         run: |
           cd nethunter
           chmod +x build.sh
-          ./build.sh -t ../android_kernel_xiaomi_sm8350 -c lineage_defconfig -b
+          ./build.sh -p  # Automatically patch the kernel
 
-      - name: 📦 Create AnyKernel3 Flashable ZIP
+      - name: Setup Toolchain (Clang 19)
         run: |
-          git clone https://github.com/osm0sis/AnyKernel3.git AnyKernel
-          cp android_kernel_xiaomi_sm8350/out/arch/arm64/boot/Image.gz-dtb AnyKernel/
-          cd AnyKernel
-          zip -r9 AnyKernel3.zip ./
+          mkdir -p toolchains
+          wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-19.0.4/clang+llvm-19.0.4-x86_64-linux-gnu.tar.xz
+          tar -xf clang+llvm-19.0.4-x86_64-linux-gnu.tar.xz -C toolchains
+          export PATH=$PWD/toolchains/clang+llvm-19.0.4-x86_64-linux-gnu/bin:$PATH
 
-      - name: 📤 Upload Kernel ZIP
-        uses: actions/upload-artifact@v4
+      - name: Compile Kernel
+        run: |
+          export ARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export CLANG_TRIPLE=aarch64-linux-gnu-
+          export PATH=$PWD/toolchains/clang+llvm-19.0.4-x86_64-linux-gnu/bin:$PATH
+          make O=out vili_defconfig
+          make O=out -j$(nproc) CC=clang CROSS_COMPILE=aarch64-linux-gnu-
+
+      - name: Package Kernel (AnyKernel3)
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git anykernel
+          cp out/arch/arm64/boot/Image.gz-dtb anykernel/
+          cd anykernel
+          zip -r9 Kernel-Nethunter.zip *
+
+      - name: Upload Kernel ZIP
+        uses: actions/upload-artifact@v3
         with:
-          name: Xiaomi-11T-Kernel
-          path: AnyKernel/AnyKernel3.zip
+          name: Kernel-Nethunter
+          path: anykernel/Kernel-Nethunter.zip
