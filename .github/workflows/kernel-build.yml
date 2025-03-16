@@ -28,7 +28,8 @@ jobs:
       run: |
         git clone --depth=1 https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel.git nethunter_patches
         cd nethunter_patches
-        ./apply-patches.sh ../
+        chmod +x build.sh
+        ./build.sh ../  # Runs build.sh instead of apply-patches.sh
         cd ..
 
     - name: Download & Setup Clang 18
