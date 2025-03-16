@@ -1,12 +1,9 @@
-name: Auto Kernel Patcher
+name: Auto Patch & Build Kali NetHunter Kernel
 
 on:
   push:
     branches:
-      - lineage-22.1
-  pull_request:
-    branches:
-      - lineage-22.1
+      - main  # Change this if your default branch is different
   workflow_dispatch:
 
 jobs:
@@ -14,43 +11,56 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Kernel Source
-        uses: actions/checkout@v4
+    - name: Checkout Kernel Source
+      uses: actions/checkout@v4
+      with:
+        repository: kerwin123kp/android_kernel_xiaomi_sdm845
+        fetch-depth: 1
 
-      - name: Install Dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y git wget curl clang lld llvm bc bison flex build-essential libssl-dev \
-          ccache make python3 rsync unzip xz-utils libarchive-tools
-      
-      - name: Clone NetHunter Kernel Builder
-        run: |
-          git clone --depth=1 https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel.git nethunter
+    - name: Install Dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y wget curl git unzip bc build-essential flex bison \
+            libssl-dev ccache make python3
 
-      - name: Apply NetHunter Patches
-        run: |
-          cd nethunter
-          chmod +x build.sh
-          export TERM=xterm  # Prevents TERM errors
-          ./build.sh -p --no-interaction --defconfig vili_defconfig || echo "[ERROR] Patch script failed"
+    - name: Clone NetHunter Patches
+      run: |
+        git clone --depth=1 https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel.git nethunter_patches
+        cd nethunter_patches
+        ./apply-patches.sh ../
+        cd ..
 
-      - name: Configure Kernel
-        run: |
-          cd nethunter
-          ./build.sh -c --defconfig vili_defconfig
+    - name: Download & Setup Clang 18
+      run: |
+        wget https://apt.llvm.org/llvm.sh
+        chmod +x llvm.sh
+        sudo ./llvm.sh 18
+        echo "PATH=/usr/lib/llvm-18/bin:$PATH" >> $GITHUB_ENV
+        echo "LD_LIBRARY_PATH=/usr/lib/llvm-18/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+        echo "CLANG_TRIPLE=aarch64-linux-gnu" >> $GITHUB_ENV
+        echo "ARCH=arm64" >> $GITHUB_ENV
+        echo "CROSS_COMPILE=aarch64-linux-gnu-" >> $GITHUB_ENV
 
-      - name: Compile Kernel
-        run: |
-          cd nethunter
-          ./build.sh -b --no-interaction
+    - name: Configure Kernel
+      run: |
+        make perseus_defconfig
 
-      - name: Package Kernel (AnyKernel3)
-        run: |
-          cd nethunter
-          ./build.sh -z
-      
-      - name: Upload Kernel Zip
-        uses: actions/upload-artifact@v3
-        with:
-          name: NetHunter-Kernel
-          path: nethunter/out/*.zip
+    - name: Compile Kernel
+      run: |
+        make -j$(nproc) CC=clang
+
+    - name: Package Flashable ZIP
+      run: |
+        mkdir -p nethunter_kernel_zip
+        cp arch/arm64/boot/Image.gz-dtb nethunter_kernel_zip/
+        wget https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel/-/raw/master/update-binary -O nethunter_kernel_zip/update-binary
+        wget https://gitlab.com/kalilinux/nethunter/build-scripts/kali-nethunter-kernel/-/raw/master/updater-script -O nethunter_kernel_zip/updater-script
+        cd nethunter_kernel_zip
+        zip -r ../nethunter_kernel.zip *
+        cd ..
+
+    - name: Upload Kernel & ZIP
+      uses: actions/upload-artifact@v4
+      with:
+        name: NetHunter-Kernel
+        path: nethunter_kernel.zip
