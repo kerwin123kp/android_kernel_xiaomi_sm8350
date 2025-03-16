@@ -3,8 +3,8 @@ name: Auto Patch & Build Kali NetHunter Kernel
 on:
   push:
     branches:
-      - main  # Change this if your default branch is different
-  workflow_dispatch:
+      - lineage-22.1  # Runs when pushing to this branch
+  workflow_dispatch:  # Allows manual triggering
 
 jobs:
   build:
@@ -14,7 +14,8 @@ jobs:
     - name: Checkout Kernel Source
       uses: actions/checkout@v4
       with:
-        repository: kerwin123kp/android_kernel_xiaomi_sdm845
+        repository: kerwin123kp/android_kernel_xiaomi_sm8350
+        ref: lineage-22.1
         fetch-depth: 1
 
     - name: Install Dependencies
@@ -43,7 +44,7 @@ jobs:
 
     - name: Configure Kernel
       run: |
-        make perseus_defconfig
+        make vili_defconfig  # Using vili_defconfig for Xiaomi 11T
 
     - name: Compile Kernel
       run: |
